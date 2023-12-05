@@ -1,53 +1,62 @@
-@tool
-## A cone shaped ShapeCast3D
-class_name ViewCone3D extends ShapeCast3D
+## A SpotLight3D that detects nodes that enter it's vision
+class_name ViewCone3D extends SpotLight3D
 
-## The radius of the viewcone
-@export var radius: float = 10.0
-## The distance of sight
-@export var distance: float = 100.0
+@export var enabled: bool = true
+@export var detection_group: String = "detectable"
+@export_flags_3d_physics var collision_layer: int = 0
 
-## A body has entered the viewcone
-signal body_entered(body: Node3D)
-## A body has exited the viewcone
-signal body_exited(body: Node3D)
+signal body_detected(body: Node3D)
+signal body_lost(body: Node3D)
 
-var colliding_bodies: Array[Node3D] = []
-
-
-func _enter_tree():
-	target_position = Vector3.ZERO
-	shape = ConvexPolygonShape3D.new()
-	var vertices: Array[Vector3] = [Vector3.ZERO]
-
-	# Generate the vertices of the cone.
-	for i in range(0, 240):
-		var angle = i * PI / 7.5
-		var x = cos(angle) * radius
-		var y = sin(angle) * radius
-		var z = distance
-		vertices.append(Vector3(x, y, z))
-
-	shape.points = vertices
-
+var detected_bodies: Array[Node] = []
 
 func _physics_process(_delta):
-	if is_colliding():
-		var collision_count = get_collision_count()
-		var current_colliders := []
-		for i in collision_count:
-			var collider = get_collider(i)
-			current_colliders.append(collider)
+	if !enabled:
+		return
+	
+	var detected_bodies_this_pass: Array[Node] = []
+	var cam_pos = global_transform.origin
+	var max_distance_squared = pow(spot_range, 2)
+	var max_angle = deg_to_rad(spot_angle)
+	
+	for body in get_tree().get_nodes_in_group(detection_group):
+		var space_state = get_world_3d().direct_space_state
+		var body_pos = body.global_transform.origin
+		if cam_pos.distance_squared_to(body_pos) > max_distance_squared:
+			continue
 
-			if !colliding_bodies.has(collider):
-				colliding_bodies.append(collider)
-				emit_signal("body_entered", collider)
+		var cam_facing = -global_transform.basis.z
+		var cam_to_body =  cam_pos.direction_to(body_pos)
+		var cam_to_body_norm = cam_to_body.normalized()
+		var cos_angle = cam_to_body_norm.dot(cam_facing)
+		var angle = acos(cos_angle)
 
-		var new_colliding_bodies = colliding_bodies
-		for i in colliding_bodies.size():
-			if i <= colliding_bodies.size() - 1:
-				var collider = colliding_bodies[i]
-				if !current_colliders.has(collider):
-					emit_signal("body_exited", collider)
-					new_colliding_bodies.remove_at(i)
-		colliding_bodies = new_colliding_bodies
+		if angle < max_angle:
+			var params = PhysicsRayQueryParameters3D.new()
+			
+			if collision_layer != 0:
+				params.collision_mask = collision_layer
+			params.from = cam_pos
+			params.to = body_pos
+
+			var result = space_state.intersect_ray(params)
+			if result and result.collider == body:
+				detected_bodies_this_pass.append(body)
+				if !detected_bodies.has(body):
+					detected_bodies.append(body)
+					if body.has_method("detected"):
+						body.detected(self)
+					emit_signal("body_detected", body)
+	
+	if detected_bodies_this_pass.size() > 0:
+		var removed_bodies: Array[Node] = []
+		for detected_body in detected_bodies:
+			if !detected_bodies_this_pass.has(detected_body):
+				removed_bodies.append(detected_body)
+				
+		for removed_body in removed_bodies:
+			if removed_body.has_method("undetected"):
+				removed_body.undetected(self)
+			emit_signal("body_lost", removed_body)
+			var i = detected_bodies.find(removed_body)
+			detected_bodies.remove_at(i)

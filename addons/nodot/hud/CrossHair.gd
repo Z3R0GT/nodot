@@ -9,12 +9,13 @@ var is_editor: bool = Engine.is_editor_hint()
 
 
 func _ready() -> void:
-	if !is_editor and is_instance_valid(WindowManager):
-		WindowManager.connect("window_resized", _on_window_resized)
-		WindowManager.bump()
-
+	if is_editor or !is_instance_valid(VideoManager): return
+	VideoManager.connect("window_resized", _on_window_resized)
+	VideoManager.bump()
 
 func _enter_tree() -> void:
+	if has_node("Sprite2D"): return
+	
 	var sprite2d: Sprite2D = Sprite2D.new()
 	sprite2d.name = "Sprite2D"
 	sprite2d.set_texture(crosshair_sprite)

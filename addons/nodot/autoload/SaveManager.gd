@@ -9,6 +9,11 @@ signal loaded
 var savers: Array[Saver] = []
 var custom_values: Dictionary = {}
 
+## Used for global options and game settings
+var config: Storage = Storage.new()
+
+func _init():
+	load_config()
 
 ## Register a saver node
 func register_saver(saver_node: Saver):
@@ -38,10 +43,7 @@ func save(slot: int = 0) -> void:
 
 
 ## Loads a save file and applies it to the nodes in the current scene
-func load(slot: int = 0, reload_scene: bool = false) -> void:
-	if reload_scene:
-		get_tree().reload_current_scene()
-		await get_tree().process_frame
+func load(slot: int = 0) -> void:
 
 	var file_path = "user://save%s.sav" % slot
 	if FileAccess.file_exists(file_path):
@@ -66,3 +68,26 @@ func get_special_id(input_node: Node):
 ## Set a custom value to be stored in the save file
 func set_value(key: String, value: Variant):
 	custom_values[key] = value
+	
+## Resets the save data to default
+func reset():
+	savers = []
+	custom_values = {}
+	load_config()
+
+## Save the configuration file
+func save_config():
+	var file_path = "user://config.bin"
+	var file = FileAccess.open(file_path, FileAccess.WRITE)
+	file.store_var(config.data, true)
+	file.close()
+	
+## Load the configuration file
+func load_config() -> void:
+	var file_path = "user://config.bin"
+	if FileAccess.file_exists(file_path):
+		var file = FileAccess.open(file_path, FileAccess.READ)
+		var new_config = file.get_var(true)
+		if new_config:
+			config.data = new_config
+		file.close()

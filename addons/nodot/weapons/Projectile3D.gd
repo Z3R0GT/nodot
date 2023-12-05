@@ -11,7 +11,6 @@ class_name Projectile3D extends RigidBody3D
 @export var destroy_on_impact: bool = false
 
 signal collision(position: Vector3, rotation: Vector3, colliders: Array[Node3D])
-signal timeout(position: Vector3, rotation: Vector3)
 signal destroyed(position: Vector3, rotation: Vector3)
 
 var is_editor: bool = Engine.is_editor_hint()
@@ -21,16 +20,16 @@ var explosion: Explosion3D
 func _enter_tree() -> void:
 	contact_monitor = true
 	max_contacts_reported = 1
-	if !is_editor:
-		explosion = Nodot.get_first_child_of_type(self, Explosion3D)
+	if is_editor: return
+	explosion = Nodot.get_first_child_of_type(self, Explosion3D)
+	if explosion:
 		remove_child(explosion)
 
 
 func _ready() -> void:
-	if lifespan > 0.0:
-		await get_tree().create_timer(lifespan).timeout
-		emit_signal("timeout", position, rotation)
-		destroy()
+	if lifespan <= 0.0: return
+	await get_tree().create_timer(lifespan, false).timeout
+	destroy()
 
 
 func _physics_process(delta: float) -> void:
@@ -45,8 +44,8 @@ func _physics_process(delta: float) -> void:
 
 
 func propel() -> void:
-	if !self_propelling:
-		apply_central_force(get_propulsion_force())
+	if self_propelling: return
+	apply_central_force(get_propulsion_force())
 
 
 func get_propulsion_force() -> Vector3:
@@ -60,10 +59,10 @@ func get_propulsion_force() -> Vector3:
 
 
 func destroy() -> void:
-	if is_instance_valid(self):
-		emit_signal("destroyed", position, rotation)
-		if explosion:
-			get_tree().root.add_child(explosion)
-			explosion.global_position = global_position
-			explosion.action()
-		queue_free()
+	if !is_instance_valid(self): return
+	emit_signal("destroyed", position, rotation)
+	if explosion:
+		get_tree().root.add_child(explosion)
+		explosion.global_position = global_position
+		explosion.action()
+	queue_free()
